@@ -1,0 +1,43 @@
+.side-nav {
+  height: 100%;
+  width: 60px;
+  position: fixed;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  background-color: #002144;
+}
+
+.side-nav a {
+  padding: 17px 17px 17px 17px;
+  color: #7F90A1;
+  display: block;
+  align: center;
+  width: 60px;
+}
+
+.side-nav a:hover {
+  color: #f1f1f1;
+}
+
+.top-nav {
+    height: 55px;
+    width: 100%;
+    position: fixed;
+    z-index: -2;
+    top: 0;
+    left: 0;
+    background-color: #F8F9F9;
+    padding-top: 13px;
+    padding-right: 13px;
+}
+
+.main {
+    height: 100%;
+    padding-left: 80px;
+    padding-top: 60px;
+}
+
+.install {
+  padding-top: 50px;
+}
