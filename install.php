@@ -20,23 +20,25 @@
         <div class="panel-body">
             
 <?php
-    // check if config.php exists (we need it already built for the moment..)
+    $MSG = '';
+    
+    // step 1 - check if config.php exists (we need it already built for the moment..)
     if (!file_exists('config.php')) {
         $COMPLETE = 0;
 
-        echo '<p>You have no config.php generated yet, at this point this must be done by you. See below for an example.</p>';
-        echo '<p>Once the file has been created, refresh this page to check.</p>';
-        echo '<pre>';
-        echo str_replace(array('<', '>'), array('&lt;', '&gt;'), file_get_contents('config.example.php'));
-        echo '</pre>';
-        
-    // check if the config.php is configured properly
-    } elseif (file_exists('config.php')) {
+        $MSG .= '<p>You have no config.php generated yet, at this point this must be done by you. See below for an example.</p>';
+        $MSG .= '<pre>';
+        $MSG .= str_replace(array('<', '>'), array('&lt;', '&gt;'), file_get_contents('config.example.php'));
+        $MSG .= '</pre>';
+    }
+    
+    // step 2 - check if config.php is done correctly
+    if ($MSG == '') {
+        echo '- Checking config.php ...<br>';
         $COMPLETE = 25;
 
         // include the configuration
         require_once('config.php');
-        $MSG = '';
         
         // check for database detail
         if ((!defined('DB_HOST')) || (!defined('DB_USER')) || (!defined('DB_PASS')) || (!defined('DB_NAME')) || (!defined('DB_PREFIX'))) {
@@ -51,45 +53,112 @@
         } elseif ((ZD_DOMAIN == '') || (ZD_USER == '') || (ZD_TOKEN == '')) {
             $MSG .= '- One or more of your ZD_* settings are blank in your config.php<br>';
         }
-        
-        // display a nice message if theres issues
-        if ($MSG != '') {
-            echo 'You have the following errors with your config.php:<br>';
-            echo $MSG;
-            echo '<p>Once the file has been updated, refresh the page to check.</p>';
-        } else {
-            $COMPLETE = 50;
+    }
+    
+    // step 3 - check if mysql connection works
+    if ($MSG == '') {
+        echo '- Checking MySQL connectivity ...<br>';
+        $COMPLETE = 50;
             
-            // attempt to connect to the database
-            try {
-                $DB = new PDO('mysql:host='. DB_HOST .';dbname='. DB_NAME .';charset=utf8mb4', DB_USER, DB_PASS);
-                
-                $COMPLETE = 75;
-                
-                // check if the tables already exist
-                $DATA = $DB->query("SHOW TABLES FROM ". DB_NAME);
-                
-                $TABLES = array(
-                    'users' => false,
-                    'schedules' => false,
-                    'application' => false,
-                    'logs' => false
-                );
-                
-                while ($ITEM = $DATA->fetch(PDO::FETCH_ASSOC)) {
-                    echo DB_PREFIX . $ITEM['Tables_in_zensched'] .'||'. array_key_exists(DB_PREFIX . $ITEM['Tables_in_zensched'], $TABLES) .'|||<br>';
-                    if (array_key_exists(DB_PREFIX . $ITEM['Tables_in_zensched'], $TABLES)) {
-                        echo 'yep';
-                    }
-                }
+        // attempt to connect to the database
+        try {
+            $DB = new PDO('mysql:host='. DB_HOST .';dbname='. DB_NAME .';charset=utf8mb4', DB_USER, DB_PASS);
             
-            } catch (PDOException $ex) {
-                echo 'Unable to connect to the database:<br>';
-                echo '- '. $ex->getMessage();
-                echo '<p>Please check your MySQL login details and refresh the page once complete. Remember that the database needs to already have been created.</p>';
-            }
+        } catch (PDOException $ex) {
+            $MSG .= 'Unable to connect to the database:<br>';
+            $MSG .= '- '. $ex->getMessage();
+            $MSG .= '<p>Please check your MySQL login details and refresh the page once complete. Remember that the database needs to already have been created.</p>';
         }
     }
+    
+    // step 4 - check if tables already exist
+    if ($MSG == '') {
+        echo '- Checking for existing tables ...<br>';
+        $COMPLETE = 75;
+                
+        // check if the tables already exist
+        $TABLES = array(
+            'users' => false,
+            'schedules' => false,
+            'application' => false,
+            'logs' => false
+        );
+        
+        foreach ($TABLES as $TABLE => $STATUS) {
+            $EX = true;
+            $DATA = $DB->query("DESCRIBE ". DB_PREFIX . $TABLE) or $EX = false;
+            if ($EX) {
+                $MSG .= '- '. DB_PREFIX . $TABLE .'<br>';
+            }
+        }
+        
+        if ($MSG != '') {
+            $MSG = 'Found the following tables already in the database, these must be removed before continuing:<br>' . $MSG;
+        }
+    }
+    
+    // step 5 - create the tables
+    if ($MSG == '') {
+        echo '- Creating tables ...';
+        $COMPLETE = 100;
+        
+        // users who have access to the system (not in use yet)
+        $DB->query(
+            "CREATE TABLE ". DB_PREFIX ."users (
+                user_id int auto_increment,
+                user_name varchar(100),
+                user_password varchar(32),
+                user_email varchar(100),
+                user_status bool default true,
+                user_date_created datetime,
+                user_date_modified datetime,
+                primary key(user_id)
+            )"
+        );
+        
+        // the actual schedules
+        $DB->query(
+            "CREATE TABLE ". DB_PREFIX ."schedules (
+                sched_id int auto_increment,
+                sched_name varchar(100),
+                sched_desc varchar(250),
+                sched_date_start datetime,
+                sched_date_end datetime,
+                sched_status bool,
+                sched_date_created datetime,
+                sched_date_modified datetime,
+                sched_type enum('once', 'daily', 'weekly', 'monthly-date', 'month-day', 'yearly-date'),
+                primary key(sched_id)
+            )"
+        );
+        
+        // random settings / configuration internal
+        $DB->query(
+            "CREATE TABLE ". DB_PREFIX ."config (
+                config_id int auto_increment,
+                config_name varchar(50),
+                config_value varchar(250),
+                config_date_modified datetime,
+                primary key(config_id)
+            )"
+        );
+        
+        $DB->query(
+            "INSERT INTO ". DB_PREFIX ."config (config_name, config_value, config_date_modified) VALUES('version', '0.01', NOW())"
+        );
+    }
+    
+    echo '<hr>';
+
+    // display a nice message if theres issues
+    if ($MSG != '') {
+        echo $MSG;
+        echo '<hr>';
+        echo '<p>Once the file has been updated/fixed, refresh the page to check.</p>';
+    } else {
+        echo 'Configuration has been completed. Please head to <a href="index.php">index.php</a> to continue using Zendesk Scheduler.';
+    }
+
 ?>
         </div>
         <div class="panel-footer">
@@ -98,30 +167,19 @@
             </div>
         </div>
     </div>
-<?php
-/*
-CREATE TABLE users (
-    user_id int,
-    user_name varchar(100),
-    user_password varchar(32),
-    user_email varchar(100),
-    user_status bool,
-    user_date_created datetime,
-    user_date_modified datetime
-);
-
-CREATE TABLE schedules (
-    sched_id int,
-    sched_name varchar(100),
-    sched_desc varchar(250),
-    sched_
-)
-
-
-
-
-*/
-?>
 </div>
 </body>
 </html>
+
+
+
+<?php
+/*
+CREATE TABLE logs (
+    log_id
+    log_created
+    log_code
+    log_desc
+)
+*/
+?>
